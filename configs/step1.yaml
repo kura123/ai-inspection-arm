@@ -1,0 +1,34 @@
+# Step1: 推論のみで「基準書を読む→判定→仕分け」を行う設定
+
+llm:
+  model: claude-opus-5-5   # 費用を見て切り替える（例：claude-haiku-5-5）
+  effort: medium
+
+sim:
+  dt: 0.01          # シミュレーションの刻み [s]
+  record_hz: 20     # Step2の記録周期 [Hz]（早めに固定する）
+  seed: 0
+
+part:
+  size: 0.05        # 立方体の一辺 [m]（グリッパーの開き幅 約0.08 m より十分小さく）
+  good_ratio: 0.5   # 良品の割合
+
+camera:
+  inspect:          # 判定用：検査位置の真上（部品が画像の6割程度を占める距離）
+    res: [512, 512]
+    fov: 30
+    height: 0.2     # カメラの高さ [m]（部品の上面から0.15 m）
+  overview:         # 動画用：斜め上から全体
+    res: [1280, 720]
+    fov: 45
+
+standards:
+  # thresholds は正解ラベルの計算用（基準書の内容と一致させる。0は「少しでもあればNG」）
+  standard:
+    file: configs/standards/standard.txt
+    thresholds: {scratch: 0.3333, stain: 0.1}
+  strict:
+    file: configs/standards/strict.txt
+    thresholds: {scratch: 0.0, stain: 0.0}
+
+output_dir: outputs/step1

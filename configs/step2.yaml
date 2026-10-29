@@ -1,0 +1,36 @@
+# Step2: スクリプトのお手本で模倣学習（ACT）を行う設定。シーンはStep1と同じ
+
+sim:
+  dt: 0.01          # シミュレーションの刻み [s]
+  control_hz: 20    # 方策の制御・記録の周期 [Hz]（1周期 = シミュ5ステップ）
+  seed: 0
+
+part:
+  size: 0.05
+
+camera:
+  inspect:
+    res: [512, 512]
+    fov: 30
+    height: 0.2
+  overview:
+    res: [1280, 720]
+    fov: 45
+  policy:           # ACTの入力画像
+    res: [256, 256]
+    front_pos: [1.25, 0.0, 0.75]
+    front_lookat: [0.45, 0.0, 0.0]
+    front_fov: 55
+    wrist_fov: 70
+    wrist_near: 0.01  # 手首カメラは物に近いので、近くを描画しない範囲（既定0.1 m）を狭める
+
+task:
+  pos_noise: 0.02   # 部品の置かれる位置のばらつき [m]（検査位置を中心に±）
+  yaw_noise: 15     # 部品の向きのばらつき [deg]（±）
+  home_noise: 0.03  # 開始時の手先位置のばらつき [m]（±）
+  bin_noise: 0.02   # 箱の中で置く位置のばらつき [m]（±）
+
+data:
+  raw_dir: data/step2/raw            # エピソードごとのnpz
+  lerobot_root: data/step2/lerobot   # LeRobot形式
+  repo_id: local/inspection_sort

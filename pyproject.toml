@@ -1,0 +1,44 @@
+[project]
+name = "ai-inspection-arm"
+version = "0.1.0"
+description = "検査基準書を読んで仕分けるAI検品アーム（Genesis + Franka + Claude）"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "anthropic==2.3.0",
+  "genesis-world==1.4.5",
+  "imageio[ffmpeg]>=2.37,<3",
+  "numpy>=2.0,<2.3",
+  "pydantic>=2.13,<3",
+  "python-dotenv>=1.1,<2",
+  "pyyaml>=6.0,<7",
+  "torch==2.11.0",
+  "torchvision==0.26.0",
+]
+
+[project.optional-dependencies]
+# Step2で使う。Step1の段階では、同じ環境に同居できるかの確認だけに使う
+train = [
+  "lerobot[training]==0.6.1",  # trainingにデータセット（datasets、torchcodec、av）も含まれる
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4,<9",
+  "ruff>=0.14,<0.15",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/inspection_arm"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

@@ -1,0 +1,88 @@
+{
+  // Step1（scripts/run_step1.py）をデバッグ実行する設定
+  // 必要な拡張機能：Python、Python Debugger（ms-python.debugpy）
+  // APIを呼ぶ設定は費用がかかる（5個で約0.05ドル）。呼ばずに試すときは「判定を再利用」を使う
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Step1: 判定を再利用（APIなし）",
+      // 前回の outputs/step1/<基準書>_seed<seed>/ の rules.json と results.jsonl を使い、仕分けと録画だけ行う
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/run_step1.py",
+      "args": [
+        "--standard", "${input:standard}",
+        "--seed", "0",
+        "--reuse-judgments"
+      ],
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Step1: 5個を仕分け（API・動画あり）",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/run_step1.py",
+      "args": [
+        "--standard", "${input:standard}",
+        "--per-variant", "1",
+        "--seed", "0"
+      ],
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Step1: 引数を指定（API・動画なし）",
+      // 部品の数とseedを実行時に入力する。50個（per-variant 10）で約0.45ドル
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/run_step1.py",
+      "args": [
+        "--standard", "${input:standard}",
+        "--per-variant", "${input:perVariant}",
+        "--seed", "${input:seed}",
+        "--no-video"
+      ],
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "判定だけ試す: try_vlm（撮影のみ・APIなし）",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/try_vlm.py",
+      "args": ["--per-variant", "2", "--render-only"],
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ],
+  "inputs": [
+    {
+      "id": "standard",
+      "type": "pickString",
+      "description": "使う基準書",
+      "options": ["standard", "strict"],
+      "default": "standard"
+    },
+    {
+      "id": "perVariant",
+      "type": "promptString",
+      "description": "種類ごとの部品の数（5種類あるので、全体はこの5倍）",
+      "default": "1"
+    },
+    {
+      "id": "seed",
+      "type": "promptString",
+      "description": "部品を作るときの乱数の種",
+      "default": "0"
+    }
+  ]
+}
