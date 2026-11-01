@@ -6,6 +6,10 @@
 - お手本と比較用のスクリプトは、部品の位置の求め方だけが違う
   - oracle（お手本）：毎周期、シミュの真の位置と速度を使う
   - nominal（比較用スクリプト）：最初に見た位置と、決められた速度から推定する（速度センサーなし）
+
+Step3（VLA、設定に task.vla がある場合）:
+- 入れる箱は状態に含めない（VLAが基準書の指示文と検査画像から自分で決める）。状態は16次元
+- 流れ始めの位置の真上から検査カメラで1枚撮り、その画像を観測 "inspect" としてエピソード中ずっと渡す
 """
 
 import numpy as np
@@ -14,7 +18,9 @@ from .cell import BIN_HEIGHT, FINGER_OPEN, HAND_TO_TIP, STATION
 from .sort_task import STATE_NAMES as BASE_STATE_NAMES
 from .sort_task import GRIP_THRESHOLD, SortTask
 
-STATE_NAMES = [*BASE_STATE_NAMES, *(f"joint{k}_vel" for k in range(1, 8))]
+VEL_NAMES = [f"joint{k}_vel" for k in range(1, 8)]
+STATE_NAMES = [*BASE_STATE_NAMES, *VEL_NAMES]
+VLA_STATE_NAMES = [*BASE_STATE_NAMES[:-1], *VEL_NAMES]  # 入れる箱（target_bin）を除く
 HOLD_WIDTH = 0.0265  # 指がこれより閉じていて、手先が部品の真上にあれば「はさんだ」とみなす
 BELT_END_X = STATION[0] - 0.07  # ベルトの下流端
 
@@ -25,6 +31,9 @@ class ConveyorTask(SortTask):
         self.conv = cfg["task"]["conveyor"]
         self.dt = cfg["sim"]["dt"]
         self.control_dt = self.dt * self.substeps
+        # VLAでは入れる箱を状態に含めない。Claude＋ACTの評価では同じ設定でも含める（評価側で切り替える）
+        self.with_target_bin = "vla" not in cfg["task"]
+        self.inspect_height = cell.part_z + cfg["camera"]["inspect"]["height"]
 
     def reset(self, part: int, bin_name: str, rng: np.random.Generator, speed: float | None = None):
         super().reset(part, bin_name, rng)
@@ -34,11 +43,20 @@ class ConveyorTask(SortTask):
         self.speed = rng.uniform(*self.conv["speed"]) if speed is None else speed
         self.on_belt = True
         self.start_xy = np.array([self.conv["start_x"], y])  # 比較用スクリプトが知っている位置
+        # 流れ始めの位置で検査画像を1枚撮る（ラインの検査カメラを部品が通過した瞬間に相当）
+        # 位置を書き換えた直後は描画に反映されないことがある（録画中など）ので、1ステップ進めてから撮る
+        c.step()
+        cam = c.inspect_cam
+        cam.set_pose(pos=(*self.start_xy, self.inspect_height), lookat=(*self.start_xy, 0), up=(0, 1, 0))
+        self.inspect_image = np.asarray(cam.render()[0]).copy()
 
     def observe(self) -> dict:
         obs = super().observe()
         dq = self.cell.franka.get_dofs_velocity().cpu().numpy()[:7]
-        obs["state"] = np.concatenate([obs["state"], dq]).astype(np.float32)
+        state = obs["state"] if self.with_target_bin else obs["state"][:-1]
+        obs["state"] = np.concatenate([state, dq]).astype(np.float32)
+        if not self.with_target_bin:
+            obs["inspect"] = self.inspect_image
         return obs
 
     def apply_action(self, action):
@@ -122,4 +140,6 @@ def make_task(cell, cfg: dict) -> SortTask:
 
 
 def state_names(cfg: dict) -> list[str]:
+    if "vla" in cfg["task"]:
+        return VLA_STATE_NAMES
     return STATE_NAMES if "conveyor" in cfg["task"] else BASE_STATE_NAMES

@@ -36,6 +36,9 @@ def main() -> None:
         "observation.state": {"dtype": "float32", "shape": (len(names),), "names": names},
         "action": {"dtype": "float32", "shape": (len(ACTION_NAMES),), "names": ACTION_NAMES},
     }
+    if "vla" in cfg["task"]:  # 検査カメラ（エピソードの最初に撮った1枚を全フレームで使う）
+        ih, iw = cfg["camera"]["inspect"]["res"]
+        features["observation.images.inspect"] = {**image, "shape": (ih, iw, 3)}
     ds = LeRobotDataset.create(repo_id=cfg["data"]["repo_id"], fps=cfg["sim"]["control_hz"],
                                features=features, root=root, robot_type="franka",
                                use_videos=True)
@@ -44,13 +47,16 @@ def main() -> None:
     for f in files:
         ep = np.load(raw / f)
         for t in range(len(ep["action"])):
-            ds.add_frame({
+            frame = {
                 "observation.images.front": ep["front"][t],
                 "observation.images.wrist": ep["wrist"][t],
                 "observation.state": ep["state"][t],
                 "action": ep["action"][t],
                 "task": str(ep["task"]),
-            })
+            }
+            if "inspect" in ep:
+                frame["observation.images.inspect"] = ep["inspect"]
+            ds.add_frame(frame)
         ds.save_episode()
         print(f"{f}: {len(ep['action'])} frames")
     ds.finalize()

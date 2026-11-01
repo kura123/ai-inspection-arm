@@ -17,9 +17,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Step2で使う。Step1の段階では、同じ環境に同居できるかの確認だけに使う
+# Step2・Step3の学習（ACT、SmolVLA）で使う
 train = [
-  "lerobot[training]==0.6.1",  # trainingにデータセット（datasets、torchcodec、av）も含まれる
+  "lerobot[training,smolvla]==0.6.1",  # training: データセットと学習、smolvla: Step3のVLA
 ]
 
 [dependency-groups]

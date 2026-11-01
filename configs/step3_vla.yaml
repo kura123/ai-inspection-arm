@@ -1,0 +1,61 @@
+# Step3: 流れ続けるベルトで、VLA（SmolVLA）が基準書の指示文と画像から判定と仕分けを1つのモデルで行う
+# step2_conveyor.yaml との違いは task.vla と保存先
+
+sim:
+  dt: 0.01          # シミュレーションの刻み [s]
+  control_hz: 20    # 方策の制御・記録の周期 [Hz]（1周期 = シミュ5ステップ）
+  seed: 0
+
+part:
+  size: 0.05
+
+camera:
+  inspect:
+    res: [512, 512]
+    fov: 30
+    height: 0.2
+  overview:
+    res: [1280, 720]
+    fov: 45
+  policy:           # ACTの入力画像
+    res: [256, 256]
+    front_pos: [1.25, 0.0, 0.75]
+    front_lookat: [0.45, 0.0, 0.0]
+    front_fov: 55
+    wrist_fov: 70
+    wrist_near: 0.01  # 手首カメラは物に近いので、近くを描画しない範囲（既定0.1 m）を狭める
+
+task:
+  pos_noise: 0.02   # （このタスクでは使わない。部品の位置は conveyor で決める）
+  yaw_noise: 15     # 部品の向きのばらつき [deg]（±）
+  home_noise: 0.03  # 開始時の手先位置のばらつき [m]（±）
+  bin_noise: 0.02   # 箱の中で置く位置のばらつき [m]（±）
+  conveyor:
+    start_x: 0.80          # 部品が流れ始める位置 [m]（検査位置より上流）
+    y_noise: 0.01          # ベルトの幅方向のばらつき [m]（±）
+    speed: [0.02, 0.06]    # ベルトの速度の範囲 [m/s]（エピソードごとに一様に選ぶ）
+    nominal_speed: 0.04    # 比較用スクリプトが前提にする速度 [m/s]
+    lead: 0.1              # 追従の遅れを補うため、何秒先の位置に手先を合わせるか [s]
+  vla:
+    # 検査カメラは部品が流れ始める位置の真上に置き、流れ始めに1枚撮った画像を以降の観測でも使い続ける
+    # 指示文はSmolVLAの上限（48トークン）に収まる英語の要約。thresholds は正解の計算用（Step1と同じ）
+    parts_per_variant: 6   # 種類ごとに見た目の違う部品をいくつ作るか
+    standards:             # 学習に使う基準書
+      standard:
+        instruction: "Standard rule: NG if a scratch is at least 1/3 of the side or a stain is at least 10% of the area."
+        thresholds: {scratch: 0.3333, stain: 0.1}
+        file: configs/standards/standard.txt
+      strict:
+        instruction: "Strict rule: NG if there is any scratch or any stain."
+        thresholds: {scratch: 0.0, stain: 0.0}
+        file: configs/standards/strict.txt
+    unseen:                # 学習に使わない基準書（評価のみ）。色ムラは不問なので、色ムラ・大もOKになる
+      scratch_only:
+        instruction: "Scratch-only rule: NG if a scratch is at least 1/3 of the side. Stains are acceptable."
+        thresholds: {scratch: 0.3333}
+        file: configs/standards/scratch_only.txt
+
+data:
+  raw_dir: data/step3_vla/raw            # エピソードごとのnpz
+  lerobot_root: data/step3_vla/lerobot   # LeRobot形式
+  repo_id: local/inspection_sort_vla

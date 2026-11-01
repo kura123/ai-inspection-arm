@@ -16,44 +16,18 @@ import json
 from pathlib import Path
 
 import numpy as np
-import torch
 import yaml
 from PIL import Image
 
 from inspection_arm.cell import Cell
 from inspection_arm.parts import VARIANTS, export_part, sample_defect
+from inspection_arm.policy_io import act_step, load_policy
 from inspection_arm.conveyor_task import ConveyorTask, make_task
 from inspection_arm.sort_task import task_text
 
 MODE_NAMES = {"act": "ACT（模倣学習）", "script": "スクリプト制御（お手本）",
               "oracle": "スクリプト制御（真の速度を使用）"}
 CONVEYOR_MODE_NAMES = {**MODE_NAMES, "script": "スクリプト制御（速度4cm/sを前提）"}
-
-
-def load_act(path: str, n_action_steps: int | None):
-    from lerobot.policies import make_pre_post_processors
-    from lerobot.policies.act.modeling_act import ACTPolicy
-
-    policy = ACTPolicy.from_pretrained(path).to("cuda").eval()
-    if n_action_steps:
-        policy.config.n_action_steps = n_action_steps  # 予測し直す間隔は学習し直さずに変えられる
-    pre, post = make_pre_post_processors(
-        policy.config, pretrained_path=path,
-        preprocessor_overrides={"device_processor": {"device": "cuda"}},
-    )
-    return policy, pre, post
-
-
-def to_batch(obs: dict, task: str) -> dict:
-    """観測をLeRobotの形式にする（画像は 1xCxHxW、0〜1のfloat）。"""
-    def image(a):
-        return torch.from_numpy(np.ascontiguousarray(a)).permute(2, 0, 1).unsqueeze(0).float() / 255
-    return {
-        "observation.images.front": image(obs["front"]),
-        "observation.images.wrist": image(obs["wrist"]),
-        "observation.state": torch.from_numpy(obs["state"]).unsqueeze(0),
-        "task": [task],
-    }
 
 
 def main() -> None:
@@ -92,7 +66,7 @@ def main() -> None:
     conveyor = isinstance(task, ConveyorTask)
     names = CONVEYOR_MODE_NAMES if conveyor else MODE_NAMES
     if args.mode == "act":
-        policy, pre, post = load_act(args.policy, args.n_action_steps)
+        policy, pre, post = load_policy(args.policy, args.n_action_steps)
 
     results = []
     for ep in range(args.episodes):
@@ -123,9 +97,7 @@ def main() -> None:
                 obs = task.observe()
                 cell.overlay = {"lines": title, "inset": Image.fromarray(obs["wrist"]),
                                 "inset_label": "手首カメラ"}
-                with torch.inference_mode():
-                    action = post(policy.select_action(pre(to_batch(obs, task_text(bin_name)))))
-                task.apply_action(action.squeeze(0).cpu().numpy())
+                task.apply_action(act_step(policy, pre, post, obs, task_text(bin_name)))
                 max_z = max(max_z, float(cell.parts[part].get_pos()[2]))
         else:
             estimate = "nominal" if args.mode == "script" else "oracle"

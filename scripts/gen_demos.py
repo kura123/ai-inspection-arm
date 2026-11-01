@@ -1,7 +1,9 @@
 """Step2のお手本データ生成：スクリプトで仕分けを行い、20Hzで観測と行動を記録する。
 
 使い方: uv run python scripts/gen_demos.py [--config configs/step2.yaml] [--episodes 100] [--seed 0]
-        （流れ続けるベルト: --config configs/step2_conveyor.yaml）
+        （流れ続けるベルト: --config configs/step2_conveyor.yaml、VLA: --config configs/step3_vla.yaml）
+VLAでは、エピソードごとに学習用の基準書を1つ選び、その基準書での正解の箱に入れるお手本を作る。
+指示文（task）は基準書の英語の要約、検査画像（inspect）はエピソードごとに1枚保存する。
 出力: 設定の data.raw_dir（例 data/step2/raw/）ep_XXXX.npz（成功したエピソードのみ）、summary.json、preview.mp4（最初の数エピソード）
 """
 
@@ -33,8 +35,10 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(args.seed)
 
-    # 見た目の違う部品を種類ごとに2個ずつ用意し、エピソードごとに1個を使う
-    defects = [sample_defect(v, rng) for v in VARIANTS for _ in range(2)]
+    vla = cfg["task"].get("vla")
+    # 見た目の違う部品を種類ごとに用意し（既定2個、VLAは判定を学ぶので多め）、エピソードごとに1個を使う
+    per_variant = vla["parts_per_variant"] if vla else 2
+    defects = [sample_defect(v, rng) for v in VARIANTS for _ in range(per_variant)]
     files = [export_part(out / "parts" / f"{i:02d}.glb", cfg["part"]["size"], d, rng)
              for i, d in enumerate(defects)]
     cell = Cell(cfg, files, None)
@@ -46,7 +50,15 @@ def main() -> None:
     for ep in range(args.episodes):
         t0 = time.time()
         part = int(rng.integers(len(files)))
-        bin_name = str(rng.choice(["OK", "NG"]))
+        if vla:
+            standard = str(rng.choice(list(vla["standards"])))
+            std = vla["standards"][standard]
+            bin_name = "NG" if defects[part].is_ng(std["thresholds"]) else "OK"
+            text = std["instruction"]
+        else:
+            standard = None
+            bin_name = str(rng.choice(["OK", "NG"]))
+            text = task_text(bin_name)
         task.reset(part, bin_name, rng)
         frames = {"front": [], "wrist": [], "state": [], "action": []}
         for target, grip in task.expert_plan():
@@ -60,9 +72,10 @@ def main() -> None:
                 preview.append_data(np.concatenate([obs["front"], obs["wrist"]], axis=1))
         res = task.result()
         row = {"episode": ep, "part": part, "variant": defects[part].variant, "bin": bin_name,
-               "frames": len(frames["action"]), "speed": getattr(task, "speed", 0.0), **res}
+               "frames": len(frames["action"]), "speed": getattr(task, "speed", 0.0), "standard": standard, **res}
         if res["success"]:
-            np.savez_compressed(out / f"ep_{n_saved:04d}.npz", task=task_text(bin_name),
+            extra = {"inspect": task.inspect_image} if vla else {}
+            np.savez_compressed(out / f"ep_{n_saved:04d}.npz", task=text, **extra,
                                 **{k: np.stack(v) for k, v in frames.items()})
             row["file"] = f"ep_{n_saved:04d}.npz"
             n_saved += 1
